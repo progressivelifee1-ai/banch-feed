@@ -3,7 +3,7 @@
 base.json  - основа: все товары (скрытые идут как out of stock).
 Публичный API Tilda - видимые товары (актуальные цена/наличие, новые товары).
 """
-import json, os, re, sys, time, urllib.request, urllib.parse
+import json, os, re, sys, time, urllib.request, urllib.parse, urllib.error
 from html.parser import HTMLParser
 from xml.sax.saxutils import escape
 
@@ -92,18 +92,38 @@ class PageParser(HTMLParser):
         return t.strip()
 
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ru-RU,ru;q=0.9,uk;q=0.8,en;q=0.7",
+    "Referer": "https://banch.com.ua/",
+}
+FAILS = []
+
+
 def fetch_page(url):
-    """Возвращает (описание, [фото]) со страницы товара или (None, None) при ошибке."""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
-        p = PageParser()
-        p.feed(html)
-        time.sleep(0.7)
-        return (p.text()[:5000] or None), (p.imgs or None)
-    except Exception as e:  # страница недоступна - останутся данные из основы
-        print("page fail:", url, e)
-        return None, None
+    """Возвращает (описание, [фото]) со страницы товара или (None, None) при ошибке.
+    При 403/429 (сайт притормаживает) ждёт и пробует ещё раз."""
+    last = None
+    for wait in (0, 20, 60, 120):
+        if wait:
+            time.sleep(wait)
+        try:
+            req = urllib.request.Request(url, headers=HEADERS)
+            html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+            p = PageParser()
+            p.feed(html)
+            time.sleep(1.2)
+            return (p.text()[:5000] or None), (p.imgs or None)
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in (403, 429, 500, 502, 503, 504):
+                break
+        except Exception as e:
+            last = e
+    print("page fail:", url, last)
+    FAILS.append(url)
+    return None, None
 
 
 def money(v):
@@ -178,4 +198,4 @@ if __name__ == "__main__":
     xml, n = build(base, vis)
     os.makedirs("docs", exist_ok=True)
     open("docs/feed.xml", "w", encoding="utf-8").write(xml)
-    print("items:", n, "visible from API:", len(vis))
+    print("items:", n, "visible from API:", len(vis), "page fails:", len(FAILS))
