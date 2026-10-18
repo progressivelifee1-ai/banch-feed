@@ -3,7 +3,8 @@
 base.json  - основа: все товары (скрытые идут как out of stock).
 Публичный API Tilda - видимые товары (актуальные цена/наличие, новые товары).
 """
-import json, os, sys, time, urllib.request, urllib.parse
+import json, os, re, sys, time, urllib.request, urllib.parse
+from html.parser import HTMLParser
 from xml.sax.saxutils import escape
 
 API = "https://store.tildaapi.one/api/getproductslist/"
@@ -11,6 +12,8 @@ PARAMS = {"storepartuid": "295655874311", "recid": "273261007", "getparts": "tru
           "getoptions": "true", "flag_root": "withroot", "size": "100"}
 SHIP = "50 UAH"
 LABEL = "От 150 до 250"
+SHOP_DESC = "banch.com.ua - интернет-магазин популярных товаров по доступным ценам с доставкой по Украине. Товары для дома и кухни, сад и огород, охота и рыбалка, автотовары, уход за собой, гаджеты и электроника. Отправка в течение 1 рабочего дня, оплата при получении."
+FETCH_PAGES = True  # описание и фото ВСЕХ товаров брать со страниц сайта (скрытые тоже)
 
 
 def fetch_visible():
@@ -25,6 +28,52 @@ def fetch_visible():
         if not prods or len(out) >= int(data.get("total") or 0):
             return out
         slice_ += 1
+
+
+VOID = {"br", "img", "hr", "input", "meta", "link", "area", "base", "col", "embed", "source", "wbr"}
+
+
+class PageParser(HTMLParser):
+    """Достаёт со страницы товара описание (.t762__descr) и фото (.t-slds__bgimg)."""
+
+    def __init__(self):
+        super().__init__()
+        self.imgs, self.desc, self._d = [], [], 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        cls = (a.get("class") or "").split()
+        if tag in VOID:
+            pass
+        elif self._d:
+            self._d += 1
+        elif "t762__descr" in cls:
+            self._d = 1
+        if "t-slds__bgimg" in cls and a.get("data-original") and a["data-original"] not in self.imgs:
+            self.imgs.append(a["data-original"])
+
+    def handle_endtag(self, tag):
+        if self._d and tag not in VOID:
+            self._d -= 1
+
+    def handle_data(self, data):
+        if self._d:
+            self.desc.append(data)
+
+
+def fetch_page(url):
+    """Возвращает (описание, [фото]) со страницы товара или (None, None) при ошибке."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+        p = PageParser()
+        p.feed(html)
+        time.sleep(0.7)
+        desc = re.sub(r"\s+", " ", "".join(p.desc)).strip()
+        return (desc or None), (p.imgs or None)
+    except Exception as e:  # страница недоступна - останутся данные из основы
+        print("page fail:", url, e)
+        return None, None
 
 
 def money(v):
@@ -68,20 +117,26 @@ def build(base, visible):
             price = money(v["price"])
             title = v.get("title") or b["title"]
             link = v.get("url") or b["link"]
-            imgs = b["imgs"] or imgs_of(v)
+            pdesc, pimgs = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None)
+            desc = pdesc or b["desc"]
+            imgs = pimgs or b["imgs"] or imgs_of(v)
         else:
-            avail, price, title, link, imgs = "out of stock", b["price"], b["title"], b["link"], b["imgs"]
-        items.append(item(sku, title, b["desc"], link, imgs, avail, price))
+            avail, price, title, link = "out of stock", b["price"], b["title"], b["link"]
+            pdesc, pimgs = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None)
+            desc, imgs = pdesc or b["desc"], pimgs or b["imgs"]
+        items.append(item(sku, title, desc, link, imgs, avail, price))
     for sku, v in vis.items():  # новые товары, которых нет в основе
         if sku in seen:
             continue
         q = str(v.get("quantity", "")).strip()
-        items.append(item(sku, v["title"], v.get("descr") or v.get("text") or "", v.get("url") or "",
-                          imgs_of(v), "out of stock" if q == "0" else "in stock", money(v["price"])))
+        link = v.get("url") or ""
+        pdesc, pimgs = fetch_page(link) if (FETCH_PAGES and link) else (None, None)
+        items.append(item(sku, v["title"], pdesc or v.get("descr") or v.get("text") or "", link,
+                          pimgs or imgs_of(v), "out of stock" if q == "0" else "in stock", money(v["price"])))
     head = ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">\n<channel>\n'
             '<title>Banch</title>\n<link>https://banch.com.ua</link>\n'
-            '<description>Banch - интернет-магазин</description>\n')
+            '<description>%s</description>\n' % escape(SHOP_DESC))
     return head + "\n".join(items) + "\n</channel>\n</rss>\n", len(items)
 
 
