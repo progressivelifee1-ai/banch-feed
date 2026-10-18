@@ -38,7 +38,7 @@ class PageParser(HTMLParser):
 
     def __init__(self):
         super().__init__()
-        self.imgs, self.desc, self._d = [], [], 0
+        self.imgs, self.desc, self._d, self._done = [], [], 0, False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -47,7 +47,7 @@ class PageParser(HTMLParser):
             pass
         elif self._d:
             self._d += 1
-        elif "t762__descr" in cls:
+        elif "t762__descr" in cls and not self._done:
             self._d = 1
         if "t-slds__bgimg" in cls and a.get("data-original") and a["data-original"] not in self.imgs:
             self.imgs.append(a["data-original"])
@@ -55,6 +55,8 @@ class PageParser(HTMLParser):
     def handle_endtag(self, tag):
         if self._d and tag not in VOID:
             self._d -= 1
+            if not self._d:
+                self._done = True
 
     def handle_data(self, data):
         if self._d:
