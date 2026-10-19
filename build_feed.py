@@ -197,7 +197,7 @@ def fetch_page(url):
 
 
 def money(v):
-    f = float(v)
+    f = float(str(v).replace("\xa0", "").replace(" ", "").replace(",", "."))
     return str(int(f)) if f == int(f) else "%.2f" % f
 
 
