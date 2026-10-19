@@ -47,11 +47,13 @@ class PageParser(HTMLParser):
         super().__init__()
         self.imgs, self.parts = [], []
         self._d, self._done, self._rt, self._skip = 0, False, "", 0
+        self.segs, self._hb, self.short = [], [], []   # для хаба: блоки текста и картинки описания
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         cls = (a.get("class") or "").split()
         if a.get("data-record-type") is not None:
+            self._flush()
             self._rt = a["data-record-type"]
         if tag in ("style", "script"):
             self._skip += 1
@@ -64,6 +66,21 @@ class PageParser(HTMLParser):
             self.parts.append("\n")
         if (self._d or self._rt in self.BLOCKS) and tag in self.NL:
             self.parts.append("\n")
+        if tag == "img" and "t107__width" in cls and a.get("data-original"):
+            self.segs.append(("i", a["data-original"]))
+        if self._rt in self.BLOCKS and not self._skip:
+            if tag in ("strong", "b"):
+                self._hb.append("<strong>")
+            elif tag in ("em", "i"):
+                self._hb.append("<em>")
+            elif tag in ("ul", "ol"):
+                self._hb.append("\n<%s>\n" % tag)
+            elif tag == "li":
+                self._hb.append("\n<li>")
+            elif tag in ("br", "p", "div"):
+                self._hb.append("\n")
+        if self._d and not self._skip and tag in ("br", "p", "div"):
+            self.short.append("\n")
         if "t-slds__bgimg" in cls and a.get("data-original") and a["data-original"] not in self.imgs:
             self.imgs.append(a["data-original"])
 
@@ -77,12 +94,65 @@ class PageParser(HTMLParser):
                 self.parts.append("\n")
         if self._rt in self.BLOCKS and tag in self.NL:
             self.parts.append("\n")
+        if self._rt in self.BLOCKS and not self._skip:
+            if tag in ("strong", "b"):
+                self._hb.append("</strong>")
+            elif tag in ("em", "i"):
+                self._hb.append("</em>")
+            elif tag in ("ul", "ol"):
+                self._hb.append("\n</%s>\n" % tag)
+            elif tag == "li":
+                self._hb.append("</li>\n")
+            elif tag in ("p", "div"):
+                self._hb.append("\n")
 
     def handle_data(self, data):
         if self._skip:
             return
         if self._d or self._rt in self.BLOCKS:
             self.parts.append(data)
+        if self._d:
+            self.short.append(data)
+        if self._rt in self.BLOCKS:
+            self._hb.append(escape(data) if self._rt != "60" else escape(data))
+
+    def _flush(self):
+        """Закрыть текущий текстовый блок Tilda (тип 60/61) и сохранить его как HTML."""
+        if self._rt in self.BLOCKS and self._hb:
+            t = "".join(self._hb)
+            t = re.sub(r"[^\S\n]+", " ", t)
+            lines = [l.strip() for l in t.split("\n")]
+            out = []
+            for l in lines:
+                if not l or l in ("<strong></strong>",):
+                    continue
+                if re.match(r"</?(ul|ol|li)\b", l):
+                    out.append(l)
+                elif self._rt == "60" and not l.startswith("<strong>"):
+                    out.append("<p><strong>%s</strong></p>" % l)
+                else:
+                    out.append("<p>%s</p>" % l)
+            if out:
+                self.segs.append(("t", "\n".join(out)))
+        self._hb = []
+
+    def hub(self):
+        """Описание для хаба: текст до картинок, картинки, текст после картинок."""
+        self._flush()
+        sh = re.sub(r"[^\S\n]+", " ", "".join(self.short))
+        sh = "\n".join(x.strip() for x in sh.split("\n") if x.strip())
+        before, after, imgs, seen_i = [], [], [], False
+        if sh:
+            before.append("\n".join("<p>%s</p>" % escape(x) for x in sh.split("\n")))
+        for kind, v in self.segs:
+            if kind == "i":
+                seen_i = True
+                if v not in imgs:
+                    imgs.append(v)
+            else:
+                (after if seen_i else before).append(v)
+        clean = lambda x: re.sub(r"<(ul|ol)>\s*</\1>\s*", "", "\n".join(x)).strip()
+        return {"dt0": clean(before), "dt1": clean(after), "dimg": "|".join(imgs)}
 
     def text(self):
         t = "".join(self.parts)
@@ -114,7 +184,7 @@ def fetch_page(url):
             p = PageParser()
             p.feed(html)
             time.sleep(1.2)
-            return (p.text()[:5000] or None), (p.imgs or None)
+            return (p.text()[:5000] or None), (p.imgs or None), p.hub()
         except urllib.error.HTTPError as e:
             last = e
             if e.code not in (403, 429, 500, 502, 503, 504):
@@ -123,7 +193,7 @@ def fetch_page(url):
             last = e
     print("page fail:", url, last)
     FAILS.append(url)
-    return None, None
+    return None, None, None
 
 
 def money(v):
@@ -154,9 +224,22 @@ def item(sku, title, desc, link, imgs, avail, price):
     return "\n".join(s)
 
 
+def slug_of(link):
+    return re.sub(r"^https?://[^/]+/", "", link or "").strip("/")
+
+
+def hub_row(uid, title, link, sku, cur, old, imgs, hub, desc, visible):
+    """Строка для хаба: [id, название, ссылка, артикул, цена, старая, фото, {t:{0,1}, i}, ..., статус]."""
+    if not hub:
+        hub = {"dt0": "<p>%s</p>" % escape(desc or ""), "dt1": "", "dimg": ""}
+    return [uid, title, slug_of(link), sku, str(cur), str(old or ""), "|".join(imgs or []),
+            {"t": {"0": hub["dt0"], "1": hub["dt1"]}, "i": hub["dimg"]}, "0", "", [], [],
+            "publish" if visible else "private"]
+
+
 def build(base, visible):
     vis = {str(p.get("sku", "")).strip(): p for p in visible if str(p.get("sku", "")).strip()}
-    items, seen = [], set()
+    items, seen, hubrows = [], set(), []
     for b in base:
         sku = b["sku"]
         seen.add(sku)
@@ -167,27 +250,34 @@ def build(base, visible):
             price = money(v["price"])
             title = v.get("title") or b["title"]
             link = v.get("url") or b["link"]
-            pdesc, pimgs = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None)
+            pdesc, pimgs, hub = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None, None)
             desc = pdesc or b["desc"]
             imgs = pimgs or b["imgs"] or imgs_of(v)
+            old = v.get("priceold") or b.get("old") or ""
+            hubrows.append(hub_row(b.get("uid", sku), title, link, sku, price, money(old) if old else "", imgs, hub, b["desc"], True))
         else:
             avail, price, title, link = "out of stock", b["price"], b["title"], b["link"]
-            pdesc, pimgs = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None)
+            pdesc, pimgs, hub = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None, None)
             desc, imgs = pdesc or b["desc"], pimgs or b["imgs"]
+            old = b.get("old") or ""
+            hubrows.append(hub_row(b.get("uid", sku), title, link, sku, price, money(old) if old else "", imgs, hub, b["desc"], False))
         items.append(item(sku, title, desc, link, imgs, avail, price))
     for sku, v in vis.items():  # новые товары, которых нет в основе
         if sku in seen:
             continue
         q = str(v.get("quantity", "")).strip()
         link = v.get("url") or ""
-        pdesc, pimgs = fetch_page(link) if (FETCH_PAGES and link) else (None, None)
+        pdesc, pimgs, hub = fetch_page(link) if (FETCH_PAGES and link) else (None, None, None)
         items.append(item(sku, v["title"], pdesc or v.get("descr") or v.get("text") or "", link,
                           pimgs or imgs_of(v), "out of stock" if q == "0" else "in stock", money(v["price"])))
+        old = v.get("priceold") or ""
+        hubrows.append(hub_row(v.get("uid", sku), v["title"], link, sku, money(v["price"]), money(old) if old else "",
+                               pimgs or imgs_of(v), hub, v.get("descr") or v.get("text") or "", True))
     head = ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">\n<channel>\n'
             '<title>Banch</title>\n<link>https://banch.com.ua</link>\n'
             '<description>%s</description>\n' % escape(SHOP_DESC))
-    return head + "\n".join(items) + "\n</channel>\n</rss>\n", len(items)
+    return head + "\n".join(items) + "\n</channel>\n</rss>\n", len(items), hubrows
 
 
 if __name__ == "__main__":
@@ -195,7 +285,8 @@ if __name__ == "__main__":
     vis = json.load(open(sys.argv[1])) if len(sys.argv) > 1 else fetch_visible()
     if len(vis) == 0:
         sys.exit("API вернул 0 товаров - фид не обновляю")
-    xml, n = build(base, vis)
+    xml, n, hubrows = build(base, vis)
     os.makedirs("docs", exist_ok=True)
     open("docs/feed.xml", "w", encoding="utf-8").write(xml)
+    json.dump(hubrows, open("docs/hubdata.json", "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     print("items:", n, "visible from API:", len(vis), "page fails:", len(FAILS))
