@@ -248,7 +248,7 @@ def build(base, visible):
     for b in base:
         buid = str(b.get("uid", "")).strip()
         # сопоставляем по uid (артикул в Tilda менялся), запасной вариант - по старому артикулу
-        v = vis_uid.get(buid) or vis.get(b["sku"])
+        v = vis_uid.get(buid) or (None if sku_map else vis.get(b["sku"]))
         if sku_map and buid not in sku_map and not v:
             continue  # товар удалён в Tilda
         sku = str((v or {}).get("sku", "")).strip() or sku_map.get(buid) or b["sku"]
