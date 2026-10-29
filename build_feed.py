@@ -240,10 +240,20 @@ def hub_row(uid, title, link, sku, cur, old, imgs, hub, desc, visible):
 def build(base, visible):
     vis = {str(p.get("sku", "")).strip(): p for p in visible if str(p.get("sku", "")).strip()}
     items, seen, hubrows = [], set(), []
+    vis_uid = {str(p.get("uid", "")).strip(): p for p in visible if str(p.get("uid", "")).strip()}
+    try:
+        sku_map = json.load(open("sku_map.json", encoding="utf-8"))
+    except Exception:
+        sku_map = {}
     for b in base:
-        sku = b["sku"]
+        buid = str(b.get("uid", "")).strip()
+        # сопоставляем по uid (артикул в Tilda менялся), запасной вариант - по старому артикулу
+        v = vis_uid.get(buid) or vis.get(b["sku"])
+        if sku_map and buid not in sku_map and not v:
+            continue  # товар удалён в Tilda
+        sku = str((v or {}).get("sku", "")).strip() or sku_map.get(buid) or b["sku"]
         seen.add(sku)
-        v = vis.get(sku)
+        seen.add(buid)
         if v:
             q = str(v.get("quantity", "")).strip()
             avail = "out of stock" if q == "0" else "in stock"
@@ -263,7 +273,7 @@ def build(base, visible):
             hubrows.append(hub_row(b.get("uid", sku), title, link, sku, price, money(old) if old else "", imgs, hub, b["desc"], False))
         items.append(item(sku, title, desc, link, imgs, avail, price))
     for sku, v in vis.items():  # новые товары, которых нет в основе
-        if sku in seen:
+        if sku in seen or str(v.get("uid", "")).strip() in seen:
             continue
         q = str(v.get("quantity", "")).strip()
         link = v.get("url") or ""
