@@ -15,7 +15,7 @@ for r in json.load(open("docs/hubdata.json")):
     for part in (r[6], r[7]["i"]):
         urls.update(u for u in part.split("|") if u)
 def thumb(u):
-    m = re.match(r"https://static\.tildacdn\.(?:net|com)/(tild[^/]+)/(.+)$", u)
+    m = re.match(r"https://static\.tildacdn\.(?:net|com)/(til[a-z][^/]+)/(.+)$", u)
     return "https://thb.tildacdn.net/%s/-/resize/100x/%s" % (m.group(1), m.group(2)) if m else None
 def get(u):
     t = thumb(u)
