@@ -21623,5 +21623,49 @@ USB-кабель для зарядки
 <g:price>50 UAH</g:price>
 </g:shipping>
 </item>
+<item>
+<g:id>677</g:id>
+<g:title>Безперебійник для роутера UPS 10400 mAh</g:title>
+<g:description>Безперебійник для роутера UPS 10 400 мА·год — компактне джерело резервного живлення для Wi-Fi роутерів, оптичних терміналів ONU/ONT та іншого сумісного мережевого обладнання.
+Описание:
+Безперебійник для роутера UPS 10 400 мА·год — компактне джерело резервного живлення для Wi-Fi роутерів, оптичних терміналів ONU/ONT та іншого сумісного мережевого обладнання. Вбудований акумулятор підтримує роботу підключеної техніки під час відключення електроенергії.
+Особливості:
+Окремі виходи DC для обладнання з живленням 5, 9 або 12 В.
+Порт PoE з перемикачем напруги між 15 і 24 В.
+Світлодіодна індикація заряду на рівнях 25%, 50%, 75% і 100%.
+USB-A для живлення сумісних пристроїв.
+Кнопка ввімкнення та окремий індикатор стану роботи.
+Підключення до електромережі через вбудований вхід AC.
+Характеристики:
+Тип: джерело безперебійного живлення Mini UPS.
+Заявлена ємність акумулятора: 10 400 мА·год.
+Вхідна напруга: 85–265 В AC за маркуванням на корпусі.
+Виходи DC: 5 В, 9 В і 12 В.
+Напруга PoE: 15 або 24 В, перемикається.
+Інтерфейси: USB-A, LAN, PoE.
+Колір: чорний.
+Час автономної роботи: залежить від споживання підключеного обладнання та стану акумулятора.
+Комплектація:
+Безперебійник UPS — 1 шт.
+Кабель живлення від електромережі — 1 шт.
+Кабель DC для підключення обладнання — 1 шт.
+Розгалужений кабель DC — 1 шт.
+Інструкція з експлуатації.</g:description>
+<g:link>https://banch.com.ua/bezperebijnik-dlya-routera-ups-10400-mah</g:link>
+<g:image_link>https://static.tildacdn.net/tila3631-6533-4939-b164-633432353431/261105-678eaccddf4e.webp</g:image_link>
+<g:additional_image_link>https://static.tildacdn.net/tila3635-6130-4630-b765-613065306132/261105-af6c2193e4c5.webp</g:additional_image_link>
+<g:additional_image_link>https://static.tildacdn.net/tila3936-3035-4035-a631-623638643839/261105-ebed4f9bd791.webp</g:additional_image_link>
+<g:additional_image_link>https://static.tildacdn.net/tila3639-3434-4238-b631-353461316438/261105-3ed48f609e4f.webp</g:additional_image_link>
+<g:additional_image_link>https://static.tildacdn.net/tila3836-3732-4562-a338-326130633733/261105-b7ae5d7ebd67.webp</g:additional_image_link>
+<g:condition>new</g:condition>
+<g:availability>in stock</g:availability>
+<g:price>1599 UAH</g:price>
+<g:custom_label_0>От 150 до 250</g:custom_label_0>
+<g:shipping>
+<g:country>UA</g:country>
+<g:service>Standard</g:service>
+<g:price>50 UAH</g:price>
+</g:shipping>
+</item>
 </channel>
 </rss>
