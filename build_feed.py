@@ -181,6 +181,8 @@ def fetch_page(url):
         try:
             req = urllib.request.Request(url, headers=HEADERS)
             html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+            if "data-record-type" not in html:
+                return None, None, None  # страница не с Tilda (новый сайт): описание и фото берём из основы
             p = PageParser()
             p.feed(html)
             time.sleep(1.2)
@@ -209,7 +211,21 @@ def imgs_of(p):
     return [x["img"] for x in g if isinstance(x, dict) and x.get("img")]
 
 
+LINK_FIX = {"lampa-dlya-kempinga-solar-bl-2029/7693-s-akkumulyatorom": "7693-s-akkumulyatorom"}
+
+
+def fix_link(l):
+    """Прямая https-ссылка без слеша на конце и без старых «папок» Tilda."""
+    if not l:
+        return l
+    l = re.sub(r"^http://", "https://", l.strip()).rstrip("/")
+    for old, new in LINK_FIX.items():
+        l = l.replace("/" + old, "/" + new)
+    return l
+
+
 def item(sku, title, desc, link, imgs, avail, price):
+    link = fix_link(link)
     s = ["<item>", "<g:id>%s</g:id>" % escape(sku), "<g:title>%s</g:title>" % escape(title),
          "<g:description>%s</g:description>" % escape(desc or title),
          "<g:link>%s</g:link>" % escape(link)]
@@ -225,7 +241,7 @@ def item(sku, title, desc, link, imgs, avail, price):
 
 
 def slug_of(link):
-    return re.sub(r"^https?://[^/]+/", "", link or "").strip("/")
+    return re.sub(r"^https?://[^/]+/", "", fix_link(link) or "").strip("/")
 
 
 def hub_row(uid, title, link, sku, cur, old, imgs, hub, desc, visible):
