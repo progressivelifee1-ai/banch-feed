@@ -11,6 +11,7 @@ API = "https://store.tildaapi.one/api/getproductslist/"
 PARAMS = {"storepartuid": "295655874311", "recid": "273261007", "getparts": "true",
           "getoptions": "true", "flag_root": "withroot", "size": "100"}
 SHIP = "50 UAH"
+INSTOCK_UIDS = {"508987374444", "366156620994"}  # скрытые в Tilda товары, которые на новом сайте в наличии
 LABEL = "От 150 до 250"
 SHOP_DESC = "banch.com.ua - интернет-магазин популярных товаров по доступным ценам с доставкой по Украине. Товары для дома и кухни, сад и огород, охота и рыбалка, автотовары, уход за собой, гаджеты и электроника. Отправка в течение 1 рабочего дня, оплата при получении."
 FETCH_PAGES = True  # описание и фото ВСЕХ товаров брать со страниц сайта (скрытые тоже)
@@ -317,11 +318,11 @@ def build(base, visible):
             old = v.get("priceold") or b.get("old") or ""
             hubrows.append(hub_row(b.get("uid", sku), title, link, sku, price, money(old) if old else "", imgs, hub, b["desc"], True))
         else:
-            avail, price, title, link = "out of stock", b["price"], b["title"], b["link"]
+            avail, price, title, link = ("in stock" if buid in INSTOCK_UIDS else "out of stock"), b["price"], b["title"], b["link"]
             pdesc, pimgs, hub = fetch_page(link.replace("http://", "https://")) if FETCH_PAGES else (None, None, None)
             desc, imgs = pdesc or b["desc"], pimgs or b["imgs"]
             old = b.get("old") or ""
-            hubrows.append(hub_row(b.get("uid", sku), title, link, sku, price, money(old) if old else "", imgs, hub, b["desc"], False))
+            hubrows.append(hub_row(b.get("uid", sku), title, link, sku, price, money(old) if old else "", imgs, hub, b["desc"], buid in INSTOCK_UIDS))
         items.append(item(sku, title, desc, link, imgs, avail, price))
     for sku, v in vis.items():  # новые товары, которых нет в основе
         if sku in seen or str(v.get("uid", "")).strip() in seen:
