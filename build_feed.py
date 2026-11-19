@@ -172,6 +172,25 @@ HEADERS = {
 FAILS = []
 
 
+NEWIMG = {}
+
+
+def ld_imgs(html):
+    """Фото товара из JSON-LD Product на странице нового сайта (абсолютные https-адреса)."""
+    import json as _j
+    for m in re.finditer(r'<script type="application/ld\+json">(.*?)</script>', html, re.S):
+        try:
+            d = _j.loads(m.group(1))
+        except Exception:
+            continue
+        for o in (d if isinstance(d, list) else [d]):
+            if isinstance(o, dict) and o.get("@type") == "Product":
+                im = o.get("image") or []
+                im = [im] if isinstance(im, str) else im
+                return [i for i in im if isinstance(i, str) and i.startswith("https://banch.com.ua/media/")]
+    return []
+
+
 def parse_new_site(html):
     """Страница нового сайта banch.com.ua: описание в <div id="t1"> (.prose, .dimgs).
     Возвращает (текст, None, {dt0, dt1, dimg}); фото для фида остаются из основы."""
@@ -218,6 +237,7 @@ def fetch_page(url):
             html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
             if "data-record-type" not in html:
                 time.sleep(1.2)
+                NEWIMG[fix_link(url)] = ld_imgs(html)
                 return parse_new_site(html)  # страница нового сайта (не Tilda)
             p = PageParser()
             p.feed(html)
@@ -265,6 +285,7 @@ def item(sku, title, desc, link, imgs, avail, price):
     s = ["<item>", "<g:id>%s</g:id>" % escape(sku), "<g:title>%s</g:title>" % escape(title),
          "<g:description>%s</g:description>" % escape(desc or title),
          "<g:link>%s</g:link>" % escape(link)]
+    imgs = NEWIMG.get(link) or imgs  # свои фото с нового сайта, иначе (запасной вариант) прежние
     if imgs:
         s.append("<g:image_link>%s</g:image_link>" % escape(imgs[0]))
         s += ["<g:additional_image_link>%s</g:additional_image_link>" % escape(i) for i in imgs[1:10]]
