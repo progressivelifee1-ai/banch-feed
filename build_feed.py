@@ -171,6 +171,40 @@ HEADERS = {
 FAILS = []
 
 
+def parse_new_site(html):
+    """Страница нового сайта banch.com.ua: описание в <div id="t1"> (.prose, .dimgs).
+    Возвращает (текст, None, {dt0, dt1, dimg}); фото для фида остаются из основы."""
+    import html as _h
+    m = re.search(r'<div id="t1"[^>]*>(.*?)<div id="t4"', html, re.S)
+    if not m:
+        return None, None, None
+    blk = re.sub(r"<h2[^>]*>.*?</h2>", "", m.group(1), flags=re.S)
+    dm = re.search(r'<div class="dimgs">(.*?)</div>', blk, re.S)
+    dimg = []
+    if dm:
+        for x in re.findall(r'<img[^>]+src="([^"]+)"', dm.group(1)):
+            dimg.append("https://banch.com.ua" + x if x.startswith("/") else x)
+        before, after = blk[:dm.start()], blk[dm.end():]
+    else:
+        before, after = blk, ""
+
+    def txt(x):
+        x = re.sub(r"</?(p|ul|ol|li|div|br|h[1-6])\b[^>]*>", "\n", x)
+        x = _h.unescape(re.sub(r"<[^>]+>", "", x))
+        x = re.sub(r"[^\S\n]+", " ", x)
+        x = re.sub(r" ?\n ?", "\n", x)
+        return re.sub(r"\n+", "\n", x).strip()
+
+    def keep(x):
+        x = re.sub(r'</?div[^>]*>', "", x)
+        return re.sub(r"\n{2,}", "\n", x).strip()
+
+    t = txt(before + "\n" + after)
+    if not t:
+        return None, None, None
+    return t[:5000], None, {"dt0": keep(before), "dt1": keep(after), "dimg": "|".join(dimg)}
+
+
 def fetch_page(url):
     """Возвращает (описание, [фото]) со страницы товара или (None, None) при ошибке.
     При 403/429 (сайт притормаживает) ждёт и пробует ещё раз."""
@@ -182,7 +216,8 @@ def fetch_page(url):
             req = urllib.request.Request(url, headers=HEADERS)
             html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
             if "data-record-type" not in html:
-                return None, None, None  # страница не с Tilda (новый сайт): описание и фото берём из основы
+                time.sleep(1.2)
+                return parse_new_site(html)  # страница нового сайта (не Tilda)
             p = PageParser()
             p.feed(html)
             time.sleep(1.2)
