@@ -267,7 +267,7 @@ def imgs_of(p):
     return [x["img"] for x in g if isinstance(x, dict) and x.get("img")]
 
 
-LINK_FIX = {"lampa-dlya-kempinga-solar-bl-2029/7693-s-akkumulyatorom": "7693-s-akkumulyatorom"}
+LINK_FIX = {}  # 7693 оставлен как в Tilda: с «папкой» lampa-dlya-kempinga-solar-bl-2029
 
 
 def fix_link(l):
